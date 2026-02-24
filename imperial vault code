@@ -1,0 +1,176 @@
+from machine import Pin
+from time import time, ticks_ms, ticks_diff, ticks_add, sleep_ms
+from servo import Servo
+
+in1 = Pin(26, Pin.IN, Pin.PULL_UP)
+in2 = Pin(21, Pin.IN, Pin.PULL_UP)
+buzz1 = Pin(32, Pin.OUT)
+buzz2 = Pin(4, Pin.OUT)
+led1 = Pin(14, Pin.OUT)
+led2 = Pin(27, Pin.OUT)
+reed = Pin(5, Pin.IN, Pin.PULL_UP)
+servo2 = Servo(Pin(13))
+servo1 = Servo(Pin(19))
+
+led1.on()
+led2.on()
+
+TOLERANCE = 1.8
+DEBOUNCE = 50
+
+pw1 = []
+pw2 = []
+
+
+def reed_active():
+    return reed.value() == 0
+
+
+def read_button():
+    if in1.value() == 0:
+        sleep_ms(DEBOUNCE)
+        while in1.value() == 0:
+            pass
+        return 1
+
+    if in2.value() == 0:
+        sleep_ms(DEBOUNCE)
+        while in2.value() == 0:
+            pass
+        return 2
+
+    return None
+
+
+def beep_replay():
+    if not pw1:
+        return
+
+    beep_len = 100  
+
+    for btn, interval in zip(pw1, pw2):
+        sleep_ms(interval)
+        
+        if btn == 1:
+            buzz1.on()
+            sleep_ms(beep_len)
+            buzz1.off()
+        elif btn == 2:
+            buzz2.on()
+            sleep_ms(beep_len)
+            buzz2.off()
+            
+def pw_reset():
+    global pw1, pw2
+    orig1 = pw1
+    orig2 = pw2
+    pw1 = []
+    pw2 = []
+    print("Recording... Keep Reed active!")
+
+    last_press_time = None
+
+    while reed.value() == 0:
+        butt = read_button()
+        
+        if butt is not None:
+            now = ticks_ms()
+            if last_press_time is None:
+                pw1.append(butt)
+                pw2.append(0) 
+            else:
+
+                delay = ticks_diff(now, last_press_time)
+                pw1.append(butt)
+                pw2.append(delay)
+            
+            last_press_time = now
+            print(f"Recorded Button {butt}")
+
+    if len(pw1) > 0:
+        print("Pattern Saved:", pw1)
+        sleep_ms(500) 
+        beep_replay()
+    else:
+        print("Nothing recorded.")
+        pw1 = orig1
+        pw2 = orig2
+        beep_replay()
+        
+TOLERANCE = 500 
+
+def pw_check():
+    if len(pw1) == 0:
+        return False
+
+    print("Enter password...")
+    index = 0
+    last_time = None
+
+    while index < len(pw1):
+        if reed.value() == 0:
+            return False 
+
+        btn = read_button()
+        if btn is None:
+            continue
+
+        if btn != pw1[index]:
+            print("Wrong button!")
+            return False
+
+        now = ticks_ms()
+        if last_time is not None:
+            
+            actual_delay = ticks_diff(now, last_time)
+            expected_delay = pw2[index]
+            
+            if abs(actual_delay - expected_delay) > TOLERANCE:
+                print("Timing off!")
+                return False
+        
+        last_time = now
+        index += 1
+        print(f"Step {index} OK")
+
+
+    sleep_ms(200)
+    return True
+
+def unlock():
+    print("Access Granted")
+    servo1.write_angle(0)
+    servo2.write_angle(0)
+    sleep_ms(300)
+    for angle in range(0, 91):
+        servo1.write_angle(angle)
+        sleep_ms(15)
+        
+    for angle in range(90, -1, -1):
+        servo1.write_angle(angle)
+        sleep_ms(15)
+        
+    for angle in range(0, 91):
+        servo2.write_angle(angle)
+        sleep_ms(30)
+
+    for angle in range(90, -1, -1):
+        servo2.write_angle(angle)
+        sleep_ms(30)
+
+
+
+while True:
+
+    if reed.value() == 0:
+        sleep_ms(200)
+        pw_reset()
+        
+
+    if len(pw1) > 0:
+        if pw_check():
+            unlock()
+        else:
+            print("Access Denied")
+            sleep_ms(1000)
+
