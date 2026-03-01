@@ -1,7 +1,10 @@
+#import libraries
+
 from machine import Pin
 from time import time, ticks_ms, ticks_diff, ticks_add, sleep_ms
 from servo import Servo
 
+#initialise pins
 in1 = Pin(26, Pin.IN, Pin.PULL_UP)
 in2 = Pin(21, Pin.IN, Pin.PULL_UP)
 buzz1 = Pin(32, Pin.OUT)
@@ -12,20 +15,26 @@ reed = Pin(5, Pin.IN, Pin.PULL_UP)
 servo2 = Servo(Pin(13))
 servo1 = Servo(Pin(19))
 
+#turn on backlights to run throughout
 led1.on()
 led2.on()
 
+#tolerance (margin of input error)
+#debounce (input recording breaks)
 TOLERANCE = 1.8
 DEBOUNCE = 50
 
+#two password arrays, one storing the sequence of buttons,
+#and the other the time difference between them
 pw1 = []
 pw2 = []
 
 
+#method to check for reed
 def reed_active():
     return reed.value() == 0
 
-
+#methods that returns the button pressed (1 or 2)
 def read_button():
     if in1.value() == 0:
         sleep_ms(DEBOUNCE)
@@ -41,7 +50,7 @@ def read_button():
 
     return None
 
-
+# replaying of the password using the two pw arrays
 def beep_replay():
     if not pw1:
         return
@@ -59,8 +68,11 @@ def beep_replay():
             buzz2.on()
             sleep_ms(beep_len)
             buzz2.off()
-            
+     
+# reset password     
 def pw_reset():
+    
+    #store originals as well
     global pw1, pw2
     orig1 = pw1
     orig2 = pw2
@@ -87,18 +99,24 @@ def pw_reset():
             last_press_time = now
             print(f"Recorded Button {butt}")
 
+# replay new pattern
     if len(pw1) > 0:
         print("Pattern Saved:", pw1)
         sleep_ms(500) 
         beep_replay()
+        
+#if no pw set, replay old
     else:
         print("Nothing recorded.")
         pw1 = orig1
         pw2 = orig2
         beep_replay()
-        
+   
+   
+#more the tolerance, less the difficulty
 TOLERANCE = 500 
 
+# active input-wise processing and comparison with pw arrays
 def pw_check():
     if len(pw1) == 0:
         return False
@@ -137,6 +155,7 @@ def pw_check():
     sleep_ms(200)
     return True
 
+# unlock seuqence with two delayed servos
 def unlock():
     print("Access Granted")
     servo1.write_angle(0)
@@ -159,9 +178,10 @@ def unlock():
         sleep_ms(30)
 
 
-
+#main function/ driver code
 while True:
 
+#always-active check for reed value during other processes
     if reed.value() == 0:
         sleep_ms(200)
         pw_reset()
@@ -172,5 +192,7 @@ while True:
             unlock()
         else:
             print("Access Denied")
+            #recovery time to prevent extra inputs
             sleep_ms(1000)
+
 
